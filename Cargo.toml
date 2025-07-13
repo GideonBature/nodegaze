@@ -13,3 +13,6 @@ hex = "0.4"
 secp256k1 = { version = "0.29", features = ["recovery", "serde"] }
 log = "0.4"
 tracing = "0.1"
+bitcoin = "0.32.6"
+lightning = "0.0.123"
+cln-grpc = "0.1.3"
