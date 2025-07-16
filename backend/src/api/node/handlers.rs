@@ -7,6 +7,8 @@
 use crate::services::node_manager::{ConnectionRequest, LndNode, ClnNode};
 use crate::utils::NodeInfo;
 use axum::{extract::Json, http::StatusCode};
+use crate::services::node_manager::LightningClient;
+use crate::errors::LightningError;
 
 #[axum::debug_handler]
 pub async fn authenticate_node(
@@ -38,6 +40,34 @@ pub async fn authenticate_node(
                     Err((StatusCode::INTERNAL_SERVER_ERROR, format!("CLN authentication failed: {}", e)))
                 }
             }
+        }
+    }
+}
+
+pub async fn connect_lightning(
+    conn: ConnectionRequest,
+) -> Result<Box<dyn LightningClient + Send>, LightningError> {
+    match conn {
+        ConnectionRequest::Lnd(lnd_conn) => {
+            let node = LndNode::new(lnd_conn).await?;
+            Ok(Box::new(node))
+        }
+        ConnectionRequest::Cln(cln_conn) => {
+            let node = ClnNode::new(cln_conn).await?;
+            Ok(Box::new(node))
+        }
+    }
+}
+
+#[axum::debug_handler]
+pub async fn get_node_info(
+    Json(payload): Json<ConnectionRequest>,
+) -> Result<Json<NodeInfo>, (StatusCode, String)> {
+    match connect_lightning(payload).await {
+        Ok(client) => Ok(Json(client.get_info().clone())),
+        Err(e) => {
+            tracing::error!("Failed to get node info: {}", e);
+            Err((StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
         }
     }
 }
