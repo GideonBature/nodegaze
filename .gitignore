@@ -1,1 +1,9 @@
-/target
+target/
+.env*
+Cargo.lock
+!.env.example
+*.db
+*.log
+*.db-shm
+*.db-wal
+*.cert

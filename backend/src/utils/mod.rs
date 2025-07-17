@@ -12,6 +12,8 @@ use lightning::ln::features::NodeFeatures;
 use bitcoin::{Address, ScriptBuf, OutPoint};
 use lightning::ln::{PaymentHash, PaymentPreimage, PaymentSecret};
 
+pub mod crypto;
+
 /// Represents a node id, either by its public key or alias.
 #[derive(Serialize, Debug, Clone)]
 pub enum NodeId {
