@@ -5,6 +5,7 @@
 //! It orchestrates the application's startup and defines its overall structure.
 
 mod api;
+mod auth;
 mod config;
 mod database;
 mod errors;
@@ -16,9 +17,13 @@ use axum::{Extension, Router, response::Json, routing::get};
 use config::Config;
 use database::Database;
 use serde_json::{Value, json};
+use tracing::info;
+use tracing_subscriber::fmt::init;
 
 #[tokio::main]
 async fn main() {
+    init();
+
     let config = Config::from_env().unwrap();
     let db = Database::new(&config).await.unwrap();
     let pool = db.pool().clone();
@@ -27,9 +32,13 @@ async fn main() {
         .route("/", get(root_handler))
         .nest("/api/node", api::node::routes::node_router().await)
         .nest("/api/account", api::account::routes::account_router().await)
+        .nest("/auth", auth::routes::auth_router())
         .layer(Extension(pool));
 
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
+    let bind_address = format!("0.0.0.0:{}", config.server_port);
+    let listener = tokio::net::TcpListener::bind(&bind_address).await.unwrap();
+
+    info!("Starting NodeGaze server on port {}", config.server_port);
     axum::serve(listener, app).await.unwrap();
 }
 
