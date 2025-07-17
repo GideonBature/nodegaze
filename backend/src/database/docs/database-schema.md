@@ -20,6 +20,7 @@ erDiagram
         string id PK
         string account_id FK
         string name
+        string password_hash
         string email
         string role_id FK
         bool is_active

@@ -3,12 +3,14 @@
 //! Handles all account-related business operations
 
 use crate::api::account;
-use crate::database::models::{CreateUser, User};
+use crate::database::models::{CreateNewUser, CreateUser, User};
 use crate::errors::{ServiceError, ServiceResult};
 use crate::repositories::account_repository::AccountRepository;
 use crate::repositories::role_repository::RoleRepository;
 use crate::repositories::user_repository::UserRepository;
+use bcrypt::{DEFAULT_COST, hash, verify};
 use sqlx::SqlitePool;
+use std::error::Error;
 use validator::Validate;
 
 pub struct UserService<'a> {
@@ -39,7 +41,7 @@ impl<'a> UserService<'a> {
     /// - Non-existent account or role
     /// - Duplicate admin users for account
     /// - Business rule violations
-    pub async fn create_user(&self, create_user: CreateUser) -> ServiceResult<User> {
+    pub async fn create_user(&self, create_user: CreateNewUser) -> ServiceResult<User> {
         // Input validation using validator crate
         if let Err(validation_errors) = create_user.validate() {
             let error_messages: Vec<String> = validation_errors
@@ -95,9 +97,52 @@ impl<'a> UserService<'a> {
             return Err(ServiceError::not_found("Role", &create_user.role_id));
         }
 
+        // Hash the password with proper error handling
+        let password_hash = Self::hash_password(&create_user.password)?;
+        println!("Hashed password: {}", password_hash);
+
+        let data = CreateUser {
+            account_id: create_user.account_id,
+            role_id: create_user.role_id,
+            name: create_user.name,
+            email: create_user.email,
+            password_hash,
+        };
+
         // Create the user
-        let user = repo.create_user(create_user).await?;
+        let user = repo.create_user(data).await?;
         Ok(user)
+    }
+
+    /// Function to hash a password before storing in database
+    ///
+    /// # Arguments
+    /// * `password` - Plain text password to hash
+    ///
+    /// # Returns
+    /// Hashed password string
+    ///
+    /// # Errors
+    /// Returns `ServiceError` if hashing fails
+    fn hash_password(password: &str) -> ServiceResult<String> {
+        hash(password, DEFAULT_COST)
+            .map_err(|e| ServiceError::validation(format!("Password hashing failed: {}", e)))
+    }
+
+    /// Function to verify a password against the stored hash
+    ///
+    /// # Arguments
+    /// * `password` - Plain text password to verify
+    /// * `hash` - Stored password hash
+    ///
+    /// # Returns
+    /// `true` if password matches hash, `false` otherwise
+    ///
+    /// # Errors
+    /// Returns `ServiceError` if verification process fails
+    fn verify_password(password: &str, hash: &str) -> ServiceResult<bool> {
+        verify(password, hash)
+            .map_err(|e| ServiceError::validation(format!("Password verification failed: {}", e)))
     }
 
     /// Retrieves a user by ID with existence verification.
@@ -120,7 +165,7 @@ impl<'a> UserService<'a> {
     }
 
     /// Business validation rules.
-    fn validate_business_rules(&self, create_user: &CreateUser) -> ServiceResult<()> {
+    fn validate_business_rules(&self, create_user: &CreateNewUser) -> ServiceResult<()> {
         // Validate name doesn't start with numbers or special characters
         if create_user
             .name

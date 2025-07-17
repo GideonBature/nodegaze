@@ -41,11 +41,36 @@ pub struct CreateAccount {
     pub email: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+pub struct CreateNewAccount {
+    #[validate(length(
+        min = 1,
+        max = 255,
+        message = "Account name must be between 1-255 characters"
+    ))]
+    pub name: String,
+    #[validate(length(
+        min = 1,
+        max = 255,
+        message = "User's name must be between 1-255 characters"
+    ))]
+    pub username: String,
+    #[validate(
+        email(message = "Must be a valid email"),
+        length(max = 255, message = "Email too long")
+    )]
+    pub email: String,
+
+    #[validate(length(min = 1, message = "Password is required"))]
+    pub password: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct User {
     pub id: String,
     pub account_id: String,
     pub name: String,
+    pub password_hash: String,
     pub email: String,
     pub role_id: String,
     pub is_active: bool,
@@ -53,6 +78,27 @@ pub struct User {
     pub updated_at: DateTime<Utc>,
     pub is_deleted: bool,
     pub deleted_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+pub struct CreateNewUser {
+    #[validate(length(min = 1, message = "Account ID is required"))]
+    pub account_id: String,
+
+    #[validate(length(min = 1, message = "Role ID is required"))]
+    pub role_id: String,
+
+    #[validate(length(min = 1, max = 255, message = "Name must be between 1-255 characters"))]
+    pub name: String,
+
+    // #[validate(
+    //     email(message = "Must be a valid email"),
+    //     length(max = 255, message = "Email too long")
+    // )]
+    pub email: String,
+
+    #[validate(length(min = 1, message = "Password is required"))]
+    pub password: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
@@ -71,6 +117,9 @@ pub struct CreateUser {
         length(max = 255, message = "Email too long")
     )]
     pub email: String,
+
+    #[validate(length(min = 1, message = "Password hash is required"))]
+    pub password_hash: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]

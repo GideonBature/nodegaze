@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))), -- UUID-like ID
     account_id TEXT NOT NULL,
     name TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
     email TEXT NOT NULL UNIQUE,
     role_id TEXT NOT NULL,
     is_active BOOLEAN NOT NULL DEFAULT 1,

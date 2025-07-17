@@ -2,7 +2,9 @@
 //!
 //! Handles all account-related business operations
 
-use crate::database::models::{Account, CreateAccount, CreateUser, UserWithAccount};
+use crate::database::models::{
+    Account, CreateAccount, CreateNewAccount, CreateNewUser, CreateUser, UserWithAccount,
+};
 use crate::errors::{ServiceError, ServiceResult};
 use crate::repositories::account_repository::AccountRepository;
 use crate::repositories::role_repository::RoleRepository;
@@ -41,7 +43,7 @@ impl<'a> AccountService<'a> {
     /// - Business rule violations
     pub async fn create_account(
         &self,
-        create_account: CreateAccount,
+        create_account: CreateNewAccount,
     ) -> ServiceResult<UserWithAccount> {
         // Input validation using validator crate
         if let Err(validation_errors) = create_account.validate() {
@@ -82,16 +84,23 @@ impl<'a> AccountService<'a> {
             return Err(ServiceError::not_found("Role", "Admin"));
         }
 
+        let new_account = CreateAccount {
+            name: create_account.name.clone(),
+            username: create_account.username.clone(),
+            email: create_account.email.clone(),
+        };
+
         // Create the account
-        let account = repo.create_account(create_account.clone()).await?;
+        let account = repo.create_account(new_account).await?;
 
         // Create the admin user for the account
         let user_service = UserService::new(self.pool);
-        let create_user = CreateUser {
+        let create_user = CreateNewUser {
             account_id: account.id.clone(),
             name: create_account.username.clone(),
             email: create_account.email.clone(),
             role_id: role.unwrap().id.clone(),
+            password: create_account.password.clone(),
         };
 
         let user = user_service.create_user(create_user).await?;
@@ -122,7 +131,7 @@ impl<'a> AccountService<'a> {
     }
 
     /// Business validation rules.
-    fn validate_business_rules(&self, create_account: &CreateAccount) -> ServiceResult<()> {
+    fn validate_business_rules(&self, create_account: &CreateNewAccount) -> ServiceResult<()> {
         // Validate name doesn't start with numbers or special characters
         if create_account
             .name

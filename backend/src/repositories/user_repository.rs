@@ -38,13 +38,14 @@ impl<'a> UserRepository<'a> {
         let user = sqlx::query_as!(
             User,
             r#"
-            INSERT INTO users (account_id, role_id, name, email, is_active)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO users (account_id, role_id, name, password_hash, email, is_active)
+            VALUES (?, ?, ?, ?, ?, ?)
             RETURNING 
             id as "id!",
             account_id as "account_id!",
             role_id as "role_id!",
             name as "name!",
+            password_hash as "password_hash!",
             email as "email!",
             is_active as "is_active!",
             created_at as "created_at!: DateTime<Utc>",
@@ -55,6 +56,7 @@ impl<'a> UserRepository<'a> {
             user.account_id,
             user.role_id,
             user.name,
+            user.password_hash,
             user.email,
             true
         )
@@ -80,6 +82,7 @@ impl<'a> UserRepository<'a> {
             account_id as "account_id!",
             role_id as "role_id!",
             name as "name!",
+            password_hash as "password_hash!",
             email as "email!",
             is_active as "is_active!",
             created_at as "created_at!: DateTime<Utc>",
@@ -112,6 +115,7 @@ impl<'a> UserRepository<'a> {
             u.account_id as "account_id!",
             u.role_id as "role_id!",
             u.name as "name!",
+            u.password_hash as "password_hash!",
             u.email as "email!",
             u.is_active as "is_active!",
             u.created_at as "created_at!: DateTime<Utc>",
