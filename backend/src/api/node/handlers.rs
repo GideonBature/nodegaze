@@ -7,6 +7,7 @@ use crate::services::node_manager::LightningClient;
 use crate::services::node_manager::{
     ClnConnection, ClnNode, ConnectionRequest, LndConnection, LndNode,
 };
+use crate::services::event_manager::{EventCollector, EventDispatcher, EventProcessor, NodeSpecificEvent};
 use crate::services::event_manager::{EventCollector, EventProcessor, NodeSpecificEvent};
 use crate::utils::jwt::Claims;
 use crate::utils::{NodeId, NodeInfo};
@@ -15,6 +16,9 @@ use axum::{
     http::StatusCode,
 };
 use sqlx::SqlitePool;
+use tokio::sync::mpsc;
+use std::sync::Arc;
+use tokio::sync::Mutex;
 
 use tokio::sync::mpsc;
 use std::sync::Arc;
@@ -53,8 +57,10 @@ pub async fn authenticate_node(
                     let lnd_node_: Arc<Mutex<Box<dyn LightningClient  + Send + Sync + 'static>>>  = Arc::new(Mutex::new(Box::new(lnd_node)));
 
                     collector.start_sending(info.pubkey, lnd_node_).await;
+                  
+                    let dispatcher = Arc::new(EventDispatcher {});
 
-                    let processor = EventProcessor::new();
+                    let processor = EventProcessor::new(dispatcher);
                     processor.start_receiving(receiver);
 
                     info
