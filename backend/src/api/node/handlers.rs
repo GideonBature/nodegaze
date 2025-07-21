@@ -7,6 +7,7 @@ use crate::services::node_manager::LightningClient;
 use crate::services::node_manager::{
     ClnConnection, ClnNode, ConnectionRequest, LndConnection, LndNode,
 };
+use crate::services::event_manager::{EventCollector, EventProcessor, NodeSpecificEvent};
 use crate::utils::jwt::Claims;
 use crate::utils::{NodeId, NodeInfo};
 use axum::{
@@ -14,7 +15,13 @@ use axum::{
     http::StatusCode,
 };
 use sqlx::SqlitePool;
+
+use tokio::sync::mpsc;
+use std::sync::Arc;
+use tokio::sync::Mutex;
+
 use uuid::Uuid;
+
 
 /// Node authentication response with stored credential info
 #[derive(Debug, serde::Serialize)]
@@ -37,8 +44,21 @@ pub async fn authenticate_node(
             match LndNode::new(lnd_conn.clone()).await {
                 Ok(lnd_node) => {
                     tracing::info!("LND node authenticated: {:?}", lnd_node.info);
-                    lnd_node.info
-                }
+
+                    let info = lnd_node.info.clone();
+
+                    let (sender, receiver) = mpsc::channel::<NodeSpecificEvent>(32);    
+
+                    let collector = EventCollector::new(sender);
+                    let lnd_node_: Arc<Mutex<Box<dyn LightningClient  + Send + Sync + 'static>>>  = Arc::new(Mutex::new(Box::new(lnd_node)));
+
+                    collector.start_sending(info.pubkey, lnd_node_).await;
+
+                    let processor = EventProcessor::new();
+                    processor.start_receiving(receiver);
+
+                    info
+                },
                 Err(e) => {
                     tracing::error!("Failed to authenticate LND node: {}", e);
                     let error_response = ApiResponse::<()>::error(
