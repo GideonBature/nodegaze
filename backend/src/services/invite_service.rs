@@ -13,9 +13,9 @@ use crate::repositories::role_repository::RoleRepository;
 use crate::repositories::user_repository::UserRepository;
 use crate::services::email_service::EmailService;
 use crate::utils::generate_random_string::generate_random_string;
-use bcrypt::{DEFAULT_COST, hash, verify};
 use chrono::{Duration, Utc};
 use sqlx::SqlitePool;
+use uuid::Uuid;
 use validator::Validate;
 
 pub struct InviteService<'a> {
@@ -77,6 +77,7 @@ impl<'a> InviteService<'a> {
         user: User,
     ) -> ServiceResult<Invite> {
         let create_invite = CreateInvite {
+            id: Uuid::now_v7().to_string(),
             account_id: user.account_id.clone(),
             invitee_email: create_invite.email,
             inviter_id: user.id.clone(),
@@ -225,8 +226,8 @@ impl<'a> InviteService<'a> {
 
         let rows_affected = sqlx::query!(
             r#"
-            UPDATE invites 
-            SET expires_at = ?, 
+            UPDATE invites
+            SET expires_at = ?,
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = ? AND is_deleted = 0
             "#,
@@ -327,8 +328,8 @@ impl<'a> InviteService<'a> {
         // Update invite status to accepted
         let rows_affected = sqlx::query!(
             r#"
-            UPDATE invites 
-            SET invite_status = ?, 
+            UPDATE invites
+            SET invite_status = ?,
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = ? AND is_deleted = 0
             "#,
@@ -354,12 +355,7 @@ impl<'a> InviteService<'a> {
             return Err(ServiceError::validation("Invitation not resent"));
         }
 
-        // TODO: Create user account for the invitee
-        // This would typically involve:
-        // 1. Creating a new user with the invitee_email
-        // 2. Associating them with the account_id
-        // 3. Setting appropriate roles/permissions
-
+        // Create a new user
         // Check if the Member role exists
         let role_repo = RoleRepository::new(self.pool);
         let role = role_repo.get_role_by_name("Member").await?;
@@ -372,11 +368,13 @@ impl<'a> InviteService<'a> {
         let password_hash = bcrypt::hash(&accept_invite.password, bcrypt::DEFAULT_COST)
             .map_err(|e| ServiceError::validation(format!("Password hashing failed: {}", e)))?;
 
+        let user_id = Uuid::now_v7().to_string();
+        // Create the user in the database
         let user = sqlx::query_as!(
             crate::database::models::User,
             r#"
-            INSERT INTO users (account_id, role_id, username, password_hash, email, is_active)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO users (id, account_id, role_id, username, password_hash, email, is_active)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             RETURNING
             id as "id!",
             account_id as "account_id!",
@@ -390,6 +388,7 @@ impl<'a> InviteService<'a> {
             is_deleted as "is_deleted!",
             deleted_at as "deleted_at?: chrono::DateTime<chrono::Utc>"
             "#,
+            user_id,
             invite.account_id,
             role.id,
             accept_invite.username,

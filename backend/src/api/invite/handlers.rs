@@ -5,11 +5,7 @@
 
 use crate::api::common::ApiResponse;
 use crate::config::Config;
-use crate::database::models::{
-    AcceptInviteRequest, CreateInvite, CreateInviteRequest, Invite, User,
-};
-use crate::errors::LightningError;
-use crate::repositories::invite_repository::InviteRepository;
+use crate::database::models::{AcceptInviteRequest, CreateInviteRequest, Invite, User};
 use crate::services::invite_service::InviteService;
 use crate::services::user_service::UserService;
 use crate::utils::jwt::Claims;
@@ -26,13 +22,6 @@ pub async fn create_invite(
     Extension(claims): Extension<Claims>,
     Json(payload): Json<CreateInviteRequest>,
 ) -> Result<Json<ApiResponse<Invite>>, (StatusCode, String)> {
-    let node_credentials = claims.node_credentials().ok_or_else(|| {
-        (
-            StatusCode::BAD_REQUEST,
-            "No node credentials found in token. Please authenticate your node first.".to_string(),
-        )
-    })?;
-
     let config = Config::from_env().unwrap();
     let user_id = claims.sub.as_str().to_string();
 
@@ -81,13 +70,6 @@ pub async fn get_invite_by_id(
     Extension(pool): Extension<SqlitePool>,
     Path(id): Path<String>,
 ) -> Result<Json<ApiResponse<Invite>>, (StatusCode, String)> {
-    let node_credentials = claims.node_credentials().ok_or_else(|| {
-        (
-            StatusCode::BAD_REQUEST,
-            "No node credentials found in token. Please authenticate your node first.".to_string(),
-        )
-    })?;
-
     let config = Config::from_env().unwrap();
     let user_id = claims.sub.as_str().to_string();
 
@@ -137,13 +119,6 @@ pub async fn get_invites(
     Extension(claims): Extension<Claims>,
     Extension(pool): Extension<SqlitePool>,
 ) -> Result<Json<ApiResponse<Vec<Invite>>>, (StatusCode, String)> {
-    let node_credentials = claims.node_credentials().ok_or_else(|| {
-        (
-            StatusCode::BAD_REQUEST,
-            "No node credentials found in token. Please authenticate your node first.".to_string(),
-        )
-    })?;
-
     let config = Config::from_env().unwrap();
     let user_id = claims.sub.as_str().to_string();
 
@@ -194,13 +169,6 @@ pub async fn resend_invite(
     Extension(claims): Extension<Claims>,
     Path(id): Path<String>,
 ) -> Result<Json<ApiResponse<Invite>>, (StatusCode, String)> {
-    let node_credentials = claims.node_credentials().ok_or_else(|| {
-        (
-            StatusCode::BAD_REQUEST,
-            "No node credentials found in token. Please authenticate your node first.".to_string(),
-        )
-    })?;
-
     let config = Config::from_env().unwrap();
     let user_id = claims.sub.as_str().to_string();
 
@@ -248,13 +216,6 @@ pub async fn accept_invite(
     Extension(claims): Extension<Claims>,
     Json(accept_invite): Json<AcceptInviteRequest>,
 ) -> Result<Json<ApiResponse<User>>, (StatusCode, String)> {
-    let node_credentials = claims.node_credentials().ok_or_else(|| {
-        (
-            StatusCode::BAD_REQUEST,
-            "No node credentials found in token. Please authenticate your node first.".to_string(),
-        )
-    })?;
-
     let config = Config::from_env().unwrap();
     let user_id = claims.sub.as_str().to_string();
 
