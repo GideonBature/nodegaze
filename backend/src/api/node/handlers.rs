@@ -3,12 +3,11 @@ use crate::api::common::ApiResponse;
 use crate::database::models::CreateCredential;
 use crate::errors::LightningError;
 use crate::repositories::credential_repository::CredentialRepository;
+use crate::services::event_manager::{EventCollector, EventHandler, NodeSpecificEvent};
 use crate::services::node_manager::LightningClient;
 use crate::services::node_manager::{
     ClnConnection, ClnNode, ConnectionRequest, LndConnection, LndNode,
 };
-use crate::services::event_manager::{EventCollector, EventDispatcher, EventProcessor, NodeSpecificEvent};
-use crate::services::event_manager::{EventCollector, EventProcessor, NodeSpecificEvent};
 use crate::utils::jwt::Claims;
 use crate::utils::{NodeId, NodeInfo};
 use axum::{
@@ -16,16 +15,11 @@ use axum::{
     http::StatusCode,
 };
 use sqlx::SqlitePool;
-use tokio::sync::mpsc;
 use std::sync::Arc;
 use tokio::sync::Mutex;
-
 use tokio::sync::mpsc;
-use std::sync::Arc;
-use tokio::sync::Mutex;
 
 use uuid::Uuid;
-
 
 /// Node authentication response with stored credential info
 #[derive(Debug, serde::Serialize)]
@@ -51,20 +45,35 @@ pub async fn authenticate_node(
 
                     let info = lnd_node.info.clone();
 
-                    let (sender, receiver) = mpsc::channel::<NodeSpecificEvent>(32);    
+                    let (sender, receiver) = mpsc::channel::<NodeSpecificEvent>(32);
 
                     let collector = EventCollector::new(sender);
-                    let lnd_node_: Arc<Mutex<Box<dyn LightningClient  + Send + Sync + 'static>>>  = Arc::new(Mutex::new(Box::new(lnd_node)));
+                    let lnd_node_: Arc<Mutex<Box<dyn LightningClient + Send + Sync + 'static>>> =
+                        Arc::new(Mutex::new(Box::new(lnd_node)));
 
                     collector.start_sending(info.pubkey, lnd_node_).await;
-                  
-                    let dispatcher = Arc::new(EventDispatcher {});
 
-                    let processor = EventProcessor::new(dispatcher);
-                    processor.start_receiving(receiver);
+                    // Start processing events with database context
+                    let handler = if let Some(user_claims) = &claims {
+                        tracing::info!(
+                            "Creating handler with database context for user: {}",
+                            user_claims.sub
+                        );
+                        EventHandler::with_context(
+                            pool.clone(),
+                            user_claims.account_id.clone(),
+                            user_claims.sub.clone(),
+                            info.pubkey.to_string(),
+                            info.alias.clone(),
+                        )
+                    } else {
+                        tracing::info!("Creating handler without database context");
+                        EventHandler::new()
+                    };
+                    handler.start_receiving(receiver);
 
                     info
-                },
+                }
                 Err(e) => {
                     tracing::error!("Failed to authenticate LND node: {}", e);
                     let error_response = ApiResponse::<()>::error(
@@ -84,7 +93,38 @@ pub async fn authenticate_node(
             match ClnNode::new(cln_conn.clone()).await {
                 Ok(cln_node) => {
                     tracing::info!("CLN node authenticated: {:?}", cln_node.info);
-                    cln_node.info
+
+                    let info = cln_node.info.clone();
+
+                    let (sender, receiver) = mpsc::channel::<NodeSpecificEvent>(32);
+
+                    let collector = EventCollector::new(sender);
+                    let cln_node_: Arc<Mutex<Box<dyn LightningClient + Send + Sync + 'static>>> =
+                        Arc::new(Mutex::new(Box::new(cln_node)));
+
+                    collector.start_sending(info.pubkey, cln_node_).await;
+
+                    // Start processing events with database context
+                    let handler = if let Some(user_claims) = &claims {
+                        tracing::info!(
+                            "Creating CLN handler with database context for user: {}",
+                            user_claims.sub
+                        );
+                        EventHandler::with_context(
+                            pool.clone(),
+                            user_claims.account_id.clone(),
+                            user_claims.sub.clone(),
+                            info.pubkey.to_string(),
+                            info.alias.clone(),
+                        )
+                    } else {
+                        tracing::info!("Creating CLN handler without database context");
+                        EventHandler::new()
+                    };
+
+                    handler.start_receiving(receiver);
+
+                    info
                 }
                 Err(e) => {
                     tracing::error!("Failed to authenticate CLN node: {}", e);
