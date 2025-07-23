@@ -214,13 +214,32 @@ impl EventService {
                 "Channel Opened".to_string(),
                 format!("New channel opened with {}", remote_pubkey),
                 HashMap::from([
-                    (
-                        "channel_id".to_string(),
-                        Value::Number((*chan_id).into()),
-                    ),
+                    ("active".to_string(), Value::Bool(*active)),
+                    ("channel_id".to_string(), Value::Number((*chan_id).into())),
                     (
                         "counterparty_node_id".to_string(),
                         Value::String(remote_pubkey.clone()),
+                    ),
+                    (
+                        "channel_point".to_string(),
+                        Value::String((channel_point).clone()),
+                    ),
+                    ("capacity".to_string(), Value::Number((*capacity).into())),
+                    (
+                        "local_balance".to_string(),
+                        Value::Number((*local_balance).into()),
+                    ),
+                    (
+                        "remote_balance".to_string(),
+                        Value::Number((*remote_balance).into()),
+                    ),
+                    (
+                        "total_satoshis_sent".to_string(),
+                        Value::Number((*total_satoshis_sent).into()),
+                    ),
+                    (
+                        "total_satoshis_received".to_string(),
+                        Value::Number((*total_satoshis_received).into()),
                     ),
                 ]),
             ),
@@ -243,42 +262,174 @@ impl EventService {
                 "Channel Closed".to_string(),
                 format!("Channel closed with {}", remote_pubkey),
                 HashMap::from([
-                    (
-                        "chan_id".to_string(),
-                        Value::Number((*chan_id).into()),
-                    ),
+                    ("chan_id".to_string(), Value::Number((*chan_id).into())),
                     (
                         "remote_pubkey".to_string(),
                         Value::String(remote_pubkey.clone()),
                     ),
+                    (
+                        "channel_point".to_string(),
+                        Value::String((channel_point).clone()),
+                    ),
+                    ("chain_hash".to_string(), Value::String(chain_hash.clone())),
+                    (
+                        "closing_tx_hash".to_string(),
+                        Value::String(closing_tx_hash.clone()),
+                    ),
+                    ("capacity".to_string(), Value::Number((*capacity).into())),
+                    (
+                        "close_height".to_string(),
+                        Value::Number((*close_height).into()),
+                    ),
+                    (
+                        "settled_balance".to_string(),
+                        Value::Number((*settled_balance).into()),
+                    ),
+                    (
+                        "time_locked_balance".to_string(),
+                        Value::Number((*time_locked_balance).into()),
+                    ),
+                    (
+                        "close_type".to_string(),
+                        Value::Number((*close_type).into()),
+                    ),
+                    (
+                        "open_initiator".to_string(),
+                        Value::Number((*open_initiator).into()),
+                    ),
+                    (
+                        "close_initiator".to_string(),
+                        Value::Number((*close_initiator).into()),
+                    ),
+                ]),
+            ),
+            crate::services::event_manager::LNDEvent::InvoiceCreated {
+                preimage,
+                hash,
+                value_msat,
+                state,
+                memo,
+                creation_date,
+                payment_request,
+            } => (
+                EventType::InvoiceCreated,
+                EventSeverity::Info,
+                "Invoice Created".to_string(),
+                format!("New invoice created for {} msat", value_msat),
+                HashMap::from([
+                    ("preimage".to_string(), Value::String(hex::encode(preimage))),
+                    ("hash".to_string(), Value::String(hex::encode(hash))),
+                    (
+                        "value_msat".to_string(),
+                        Value::Number((*value_msat).into()),
+                    ),
+                    ("state".to_string(), Value::Number((*state).into())),
+                    ("memo".to_string(), Value::String(memo.clone())),
+                    (
+                        "creation_date".to_string(),
+                        Value::Number((*creation_date).into()),
+                    ),
+                    (
+                        "payment_request".to_string(),
+                        Value::String(payment_request.clone()),
+                    ),
                 ]),
             ),
             crate::services::event_manager::LNDEvent::InvoiceSettled {
+                preimage,
                 hash,
                 value_msat,
+                state,
                 memo,
-                ..
+                creation_date,
+                payment_request,
             } => (
                 EventType::InvoiceSettled,
                 EventSeverity::Info,
                 "Invoice Settled".to_string(),
                 format!("Invoice settled for {} msat", value_msat),
                 HashMap::from([
+                    ("preimage".to_string(), Value::String(hex::encode(preimage))),
                     ("hash".to_string(), Value::String(hex::encode(hash))),
                     (
                         "value_msat".to_string(),
                         Value::Number((*value_msat).into()),
                     ),
+                    ("state".to_string(), Value::Number((*state).into())),
                     ("memo".to_string(), Value::String(memo.clone())),
+                    (
+                        "creation_date".to_string(),
+                        Value::Number((*creation_date).into()),
+                    ),
+                    (
+                        "payment_request".to_string(),
+                        Value::String(payment_request.clone()),
+                    ),
                 ]),
             ),
-            // we will add other LND event types...
-            _ => (
-                EventType::InvoiceCreated,
+            crate::services::event_manager::LNDEvent::InvoiceCancelled {
+                preimage,
+                hash,
+                value_msat,
+                state,
+                memo,
+                creation_date,
+                payment_request,
+            } => (
+                EventType::InvoiceCancelled,
+                EventSeverity::Warning,
+                "Invoice Cancelled".to_string(),
+                format!("Invoice cancelled for {} msat", value_msat),
+                HashMap::from([
+                    ("preimage".to_string(), Value::String(hex::encode(preimage))),
+                    ("hash".to_string(), Value::String(hex::encode(hash))),
+                    (
+                        "value_msat".to_string(),
+                        Value::Number((*value_msat).into()),
+                    ),
+                    ("state".to_string(), Value::Number((*state).into())),
+                    ("memo".to_string(), Value::String(memo.clone())),
+                    (
+                        "creation_date".to_string(),
+                        Value::Number((*creation_date).into()),
+                    ),
+                    (
+                        "payment_request".to_string(),
+                        Value::String(payment_request.clone()),
+                    ),
+                ]),
+            ),
+            crate::services::event_manager::LNDEvent::InvoiceAccepted {
+                preimage,
+                hash,
+                value_msat,
+                state,
+                memo,
+                creation_date,
+                payment_request,
+            } => (
+                EventType::InvoiceAccepted,
                 EventSeverity::Info,
-                "Lightning Event".to_string(),
-                "Lightning node event occurred".to_string(),
-                HashMap::new(),
+                "Invoice Accepted".to_string(),
+                format!("Invoice accepted for {} msat", value_msat),
+                HashMap::from([
+                    ("preimage".to_string(), Value::String(hex::encode(preimage))),
+                    ("hash".to_string(), Value::String(hex::encode(hash))),
+                    (
+                        "value_msat".to_string(),
+                        Value::Number((*value_msat).into()),
+                    ),
+                    ("state".to_string(), Value::Number((*state).into())),
+                    ("memo".to_string(), Value::String(memo.clone())),
+                    (
+                        "creation_date".to_string(),
+                        Value::Number((*creation_date).into()),
+                    ),
+                    (
+                        "payment_request".to_string(),
+                        Value::String(payment_request.clone()),
+                    ),
+                ]),
             ),
         }
     }
