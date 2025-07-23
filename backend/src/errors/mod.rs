@@ -39,6 +39,9 @@ pub enum LightningError {
     /// Error that occurred while getting graph.
     #[error("Get graph error: {0}")]
     GetGraphError(String),
+    /// Error that occurred while streaming events.
+    #[error("Streaming error: {0}")]
+    StreamingError(String),
 }
 
 /// Generic service error that can be used across all entities

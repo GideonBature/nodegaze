@@ -5,8 +5,10 @@
 //! and provides methods for interacting with the Lightning node RPCs.
 
 use async_trait::async_trait;
+use futures::stream::{SelectAll, StreamExt};
+use tokio_stream::Stream;
+use async_stream::stream;
 use tokio::time::Duration;
-use ::futures::stream;
 use std::collections::HashSet;
 use std::str::FromStr;
 use serde::{Serialize, Deserialize};
@@ -16,21 +18,21 @@ use crate::utils::{self, NodeInfo, NodeId};
 use tokio::{sync::Mutex, time::sleep};
 use crate::errors::LightningError;
 use lightning::ln::features::NodeFeatures;
-use tonic_lnd::{Client, lnrpc::{
-    GetInfoRequest, 
-    NodeInfoRequest, 
-    ListChannelsRequest, 
-    ChannelEventSubscription,
-    InvoiceSubscription, 
-    channel_event_update::UpdateType as LndChannelUpdateType,
-    channel_event_update::Channel as EventChannel,
+use tonic_lnd::{lnrpc::{
+    channel_event_update::{Channel as EventChannel, UpdateType as LndChannelUpdateType},
+    Invoice, 
     invoice::InvoiceState,
-}};
+    ChannelEventSubscription, 
+    ChannelEventUpdate, 
+    GetInfoRequest, 
+    InvoiceSubscription, 
+    ListChannelsRequest, 
+    NodeInfoRequest
+}, Client, tonic::Streaming};
 use cln_grpc::pb::{node_client::NodeClient, GetinfoRequest, ListchannelsRequest, ListnodesRequest};
 use tonic::transport::{Certificate, Channel, ClientTlsConfig, Identity};
 use tokio::fs::File;
 use tokio::io::{AsyncReadExt, Error};
-use tokio_stream::{Stream, StreamExt};
 use std::pin::Pin;
 use crate::services::event_manager::{NodeSpecificEvent, LNDEvent, CLNEvent};
 
@@ -123,6 +125,46 @@ impl LndNode {
             },
             network,
         })
+    }
+
+    async fn stream_channel_events(&self) -> Result<Streaming<ChannelEventUpdate>, LightningError> {
+        println!("Attempting to subscribe to LND channel events...");
+        let channel_event_stream: Streaming<ChannelEventUpdate> = match self.client.lock().await
+            .lightning()
+            .subscribe_channel_events(ChannelEventSubscription {})
+            .await
+            {
+                Ok(response) => {
+                    println!("LND channel events subscription successful: {:?}", response);
+                    response.into_inner()
+                },
+                Err(e) => {
+                    eprintln!("Error subscribing to LND channel events: {:?}", e);
+                    return Err(LightningError::StreamingError(format!("{}", e)));
+                }
+            };
+        println!("Finished channel events subscription block.");
+        Ok(channel_event_stream)
+    }
+
+    async fn stream_invoice_events(&self) -> Result<Streaming<Invoice>, LightningError> {
+        println!("Attempting to subscribe to LND invoice events...");
+        let invoice_event_stream = match self.client.lock().await
+            .lightning()
+            .subscribe_invoices(InvoiceSubscription {
+                add_index: 0,
+                settle_index: 0,
+            })
+            .await
+            {
+                Ok(response) => response.into_inner(),
+                Err(e) => {
+                    eprintln!("Error subscribing to LND invoice events: {:?}", e);
+                    return Err(LightningError::StreamingError(format!("{}", e)));
+                }
+            };
+        println!("Finished invoice events subscription block.");
+        Ok(invoice_event_stream)
     }
 }
 
@@ -271,7 +313,7 @@ pub trait LightningClient: Send {
     /// Returns a stream of raw events from the lightning node.
     async fn stream_events(
         &mut self,
-    ) -> Pin<Box<dyn Stream<Item = NodeSpecificEvent> + Send>>;
+    ) -> Result<Pin<Box<dyn Stream<Item = NodeSpecificEvent> + Send>>, LightningError>;
 }
 
 #[async_trait]
@@ -356,86 +398,29 @@ impl LightningClient for LndNode {
             .collect())
     }
 
-    async fn stream_events(&mut self) -> Pin<Box<dyn Stream<Item = NodeSpecificEvent> + Send>> {
-        println!("Attempting to subscribe to LND channel events...");
-        let channel_event_stream = match self.client.lock().await
-            .lightning()
-            .subscribe_channel_events(ChannelEventSubscription {})
-            .await
-            {
-                Ok(response) => {
-                    println!("LND channel events subscription successful: {:?}", response);
-                    response.into_inner()
-                },
-                Err(e) => {
-                    eprintln!("Error subscribing to LND channel events: {:?}", e);
-                    return Box::pin(stream::empty());
-                }
-            };
-            println!("Finished channel events subscription block.");
-/* 
-        println!("Attempting to subscribe to LND invoice events...");
-        let invoice_event_stream = match self.client.lock().await
-        println!("Got here");
-
-        println!("Attempting to subscribe to LND channel events...");
-        
-        let mut client_guard = self.client.lock().await;
-
-        let channel_event_stream = match client_guard
-            .lightning()
-            .subscribe_channel_events(ChannelEventSubscription {})
-            .await
-        {
-            Ok(response) => {
-                println!("LND channel events subscription successful: {:?}", response);
-                response.into_inner()
-            },
-            Err(e) => {
-                eprintln!("Error subscribing to LND channel events: {:?}", e);
-                return Box::pin(stream::empty());
-            }
-        };
-        println!("Finished channel events subscription block.");
-
-/*         println!("Attempting to subscribe to LND invoice events...");
-        let invoice_event_stream = match client_guard
-            .lightning()
-            .subscribe_invoices(InvoiceSubscription {
-                add_index: 0,
-                settle_index: 0,
-            })
-            .await
-            {
-                Ok(response) => response.into_inner(),
-                Err(e) => {
-                    eprintln!("Error subscribing to LND invoice events: {:?}", e);
-                    return Box::pin(stream::empty());
-                }
-            };
-        println!("Finished invoice events subscription block."); */
-        
-        {
-            Ok(response) => response.into_inner(),
-            Err(e) => {
-                eprintln!("Error subscribing to LND invoice events: {:?}", e);
-                return Box::pin(stream::empty());
-            }
-        };
-        println!("Finished invoice events subscription block."); */
+    async fn stream_events(&mut self) -> Result<Pin<Box<dyn Stream<Item = NodeSpecificEvent> + Send>>, LightningError> {
+        let channel_events_stream = self.stream_channel_events().await?;
+        let invoice_events_stream = self.stream_invoice_events().await?;
       
-        let event_stream = async_stream::stream! {
-            let mut channel_events = channel_event_stream.filter_map(|result| { 
-                match result {
+        let event_stream = stream! {
+            let channel_events_filtered = channel_events_stream.filter_map(|result| { 
+                let event_opt = match result {
                     Ok(update) => {
-                        let event_opt = match update.r#type() {
+                        match update.r#type() {
                             LndChannelUpdateType::OpenChannel => {
                                 if let Some(event_channel) = update.channel {
                                     match event_channel {
                                         EventChannel::OpenChannel(chan) => {
                                             Some(NodeSpecificEvent::LND(LNDEvent::ChannelOpened {
-                                                channel_id: chan.chan_id,
-                                                counterparty_node_id: chan.remote_pubkey,
+                                                active: chan.active,
+                                                remote_pubkey: chan.remote_pubkey,
+                                                channel_point: chan.channel_point,
+                                                chan_id: chan.chan_id,
+                                                capacity: chan.capacity,
+                                                local_balance: chan.local_balance,
+                                                remote_balance: chan.remote_balance,
+                                                total_satoshis_sent: chan.total_satoshis_sent,
+                                                total_satoshis_received: chan.total_satoshis_received,
                                             }))
                                         }
                                         _ => {
@@ -452,8 +437,18 @@ impl LightningClient for LndNode {
                                     match event_channel {
                                         EventChannel::ClosedChannel(chan_close_sum) => {
                                             Some(NodeSpecificEvent::LND(LNDEvent::ChannelClosed {
-                                                channel_id: chan_close_sum.chan_id,
-                                                counterparty_node_id: chan_close_sum.remote_pubkey,
+                                                channel_point: chan_close_sum.channel_point,
+                                                chan_id:  chan_close_sum.chan_id,
+                                                chain_hash:  chan_close_sum.chain_hash,
+                                                closing_tx_hash:  chan_close_sum.closing_tx_hash,
+                                                remote_pubkey:  chan_close_sum.remote_pubkey,
+                                                capacity:  chan_close_sum.capacity,
+                                                close_height:  chan_close_sum.close_height,
+                                                settled_balance:  chan_close_sum.settled_balance,
+                                                time_locked_balance:  chan_close_sum.time_locked_balance,
+                                                close_type:  chan_close_sum.close_type,
+                                                open_initiator:  chan_close_sum.open_initiator,
+                                                close_initiator:  chan_close_sum.close_initiator,
                                             }))
                                         }
                                         _ => {
@@ -466,23 +461,21 @@ impl LightningClient for LndNode {
                                 }
                             },
                             _ => None,
-                        };
-
-                       event_opt
+                        }
                     }
                     Err(e) => {
                         eprintln!("Error receiving LND channel event: {:?}", e);
                         None
                     }
-                }
+                };
+                futures::future::ready(event_opt)
             });
 
-/*             let invoice_events = invoice_event_stream.filter_map(|result| {
-                match result {
+            let invoice_events_filtered = invoice_events_stream.filter_map(|result| {
+                let event_opt = match result {
                     Ok(invoice) => {
-                        let event_opt = match invoice.state() {
+                        match invoice.state() {
                             InvoiceState::Open => {
-                                tracing::info!("invoice created --> Payment Hash - {:?}", invoice.r_hash);
                                 Some(NodeSpecificEvent::LND(LNDEvent::InvoiceCreated {
                                         preimage: invoice.r_preimage,
                                         hash: invoice.r_hash,
@@ -490,6 +483,7 @@ impl LightningClient for LndNode {
                                         state: invoice.state,
                                         memo: invoice.memo,
                                         creation_date: invoice.creation_date,
+                                        payment_request: invoice.payment_request,
                                 }))
                             },
                             InvoiceState::Settled => {
@@ -500,6 +494,7 @@ impl LightningClient for LndNode {
                                         state: invoice.state,
                                         memo: invoice.memo,
                                         creation_date: invoice.creation_date,
+                                        payment_request: invoice.payment_request,
                                 }))
                             },
                             InvoiceState::Canceled => {
@@ -510,6 +505,7 @@ impl LightningClient for LndNode {
                                         state: invoice.state,
                                         memo: invoice.memo,
                                         creation_date: invoice.creation_date,
+                                        payment_request: invoice.payment_request,
                                 }))
                             },
                             InvoiceState::Accepted => {
@@ -520,26 +516,29 @@ impl LightningClient for LndNode {
                                         state: invoice.state,
                                         memo: invoice.memo,
                                         creation_date: invoice.creation_date,
+                                        payment_request: invoice.payment_request,
                                 }))
                             }
-                        };
-
-                        event_opt
+                        }
                     },
                     Err(e) => {
                         eprintln!("Error receiving LND event: {:?}", e);
                         None
                     }
-                }
-            }); */
+                };
+                futures::future::ready(event_opt)
+            });
 
+            let mut merged_stream = SelectAll::new();
+            merged_stream.push(channel_events_filtered.boxed());
+            merged_stream.push(invoice_events_filtered.boxed());
 
-            while let Some(event) = channel_events.next().await {
+            while let Some(event) = merged_stream.next().await {
                 yield event;
             }
         };
 
-        Box::pin(event_stream)
+        Ok(Box::pin(event_stream))
     }
 }
 
@@ -594,7 +593,7 @@ impl LightningClient for ClnNode {
         Ok(node_channels)
     }
 
-    async fn stream_events(&mut self) -> Pin<Box<dyn Stream<Item = NodeSpecificEvent> + Send>> {
+    async fn stream_events(&mut self) -> Result<Pin<Box<dyn Stream<Item = NodeSpecificEvent> + Send>>, LightningError> {
         let event_stream = async_stream::stream! {
             let mut counter = 0;
             loop {
@@ -604,6 +603,6 @@ impl LightningClient for ClnNode {
             }
         };
 
-        Box::pin(event_stream)
+        Ok(Box::pin(event_stream))
     }
 }

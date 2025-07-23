@@ -6,7 +6,7 @@ use crate::database::models::{
 use crate::errors::{ServiceError, ServiceResult};
 use crate::repositories::event_repository::EventRepository;
 use crate::services::notification_dispatcher::NotificationDispatcher;
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use serde_json::Value;
 use sqlx::SqlitePool;
 use std::collections::HashMap;
@@ -199,40 +199,57 @@ impl EventService {
     ) {
         match lnd_event {
             crate::services::event_manager::LNDEvent::ChannelOpened {
-                channel_id,
-                counterparty_node_id,
+                active,
+                remote_pubkey,
+                channel_point,
+                chan_id,
+                capacity,
+                local_balance,
+                remote_balance,
+                total_satoshis_sent,
+                total_satoshis_received,
             } => (
                 EventType::ChannelOpened,
                 EventSeverity::Info,
                 "Channel Opened".to_string(),
-                format!("New channel opened with {}", counterparty_node_id),
+                format!("New channel opened with {}", remote_pubkey),
                 HashMap::from([
                     (
                         "channel_id".to_string(),
-                        Value::Number((*channel_id).into()),
+                        Value::Number((*chan_id).into()),
                     ),
                     (
                         "counterparty_node_id".to_string(),
-                        Value::String(counterparty_node_id.clone()),
+                        Value::String(remote_pubkey.clone()),
                     ),
                 ]),
             ),
             crate::services::event_manager::LNDEvent::ChannelClosed {
-                channel_id,
-                counterparty_node_id,
+                channel_point,
+                chan_id,
+                chain_hash,
+                closing_tx_hash,
+                remote_pubkey,
+                capacity,
+                close_height,
+                settled_balance,
+                time_locked_balance,
+                close_type,
+                open_initiator,
+                close_initiator,
             } => (
                 EventType::ChannelClosed,
                 EventSeverity::Warning,
                 "Channel Closed".to_string(),
-                format!("Channel closed with {}", counterparty_node_id),
+                format!("Channel closed with {}", remote_pubkey),
                 HashMap::from([
                     (
-                        "channel_id".to_string(),
-                        Value::Number((*channel_id).into()),
+                        "chan_id".to_string(),
+                        Value::Number((*chan_id).into()),
                     ),
                     (
-                        "counterparty_node_id".to_string(),
-                        Value::String(counterparty_node_id.clone()),
+                        "remote_pubkey".to_string(),
+                        Value::String(remote_pubkey.clone()),
                     ),
                 ]),
             ),

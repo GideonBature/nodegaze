@@ -3,11 +3,8 @@
 //! This module collects, aggregates and dispatches events occuring on a lightning node
 //! in order to provide timely notifications for critical events.
 
-use std::collections::HashMap;
-
 use crate::services::node_manager::LightningClient;
 use bitcoin::secp256k1::PublicKey;
-use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::pin::Pin;
 use std::sync::Arc;
@@ -19,12 +16,29 @@ use tokio_stream::StreamExt;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum LNDEvent {
     ChannelOpened {
-        channel_id: u64,
-        counterparty_node_id: String,
+        active: bool,
+        remote_pubkey: String,
+        channel_point: String,
+        chan_id: u64,
+        capacity: i64,
+        local_balance: i64,
+        remote_balance: i64,
+        total_satoshis_sent: i64,
+        total_satoshis_received: i64,
     },
     ChannelClosed {
-        channel_id: u64,
-        counterparty_node_id: String,
+        channel_point: String,
+        chan_id: u64,
+        chain_hash: String,
+        closing_tx_hash: String,
+        remote_pubkey: String,
+        capacity: i64,
+        close_height: u32,
+        settled_balance: i64,
+        time_locked_balance: i64,
+        close_type: i32,
+        open_initiator: i32,
+        close_initiator: i32,
     },
     InvoiceCreated {
         preimage: Vec<u8>,
@@ -33,6 +47,7 @@ pub enum LNDEvent {
         state: i32,
         memo: String,
         creation_date: i64,
+        payment_request: String,
     },
     InvoiceSettled {
         preimage: Vec<u8>,
@@ -41,6 +56,7 @@ pub enum LNDEvent {
         state: i32,
         memo: String,
         creation_date: i64,
+        payment_request: String,
     },
     InvoiceCancelled {
         preimage: Vec<u8>,
@@ -49,6 +65,7 @@ pub enum LNDEvent {
         state: i32,
         memo: String,
         creation_date: i64,
+        payment_request: String,
     },
     InvoiceAccepted {
         preimage: Vec<u8>,
@@ -57,6 +74,7 @@ pub enum LNDEvent {
         state: i32,
         memo: String,
         creation_date: i64,
+        payment_request: String,
     },
 }
 
@@ -92,9 +110,15 @@ impl EventCollector {
 
         tokio::spawn(async move {
             let mut lnd_node_guard = lnd_node_.lock().await;
-            let mut event_stream: Pin<
-                Box<dyn Stream<Item = NodeSpecificEvent> + std::marker::Send>,
-            > = lnd_node_guard.stream_events().await;
+            let event_stream_result = lnd_node_guard.stream_events().await;
+
+            let mut event_stream: Pin<Box<dyn Stream<Item = NodeSpecificEvent> + Send>> = match event_stream_result {
+                Ok(stream) => stream,
+                Err(e) => {
+                    eprintln!("Failed to start event stream for node {}: {:?}", node_id_for_task, e);
+                    return;
+                }
+            };
 
             while let Some(event) = event_stream.next().await {
                 if sender.send(event).await.is_err() {
