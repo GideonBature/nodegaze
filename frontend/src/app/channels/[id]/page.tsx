@@ -1,5 +1,7 @@
 "use client";
-import { use } from "react";
+// import { use } from "react";
+import { useEffect } from "react";
+import React from "react";
 
 import { AppLayout } from "@/components/app-layout";
 import { Button } from "@/components/ui/button";
@@ -7,55 +9,116 @@ import { ArrowLeftIcon } from "@/public/assets/icons/arrow-left";
 import { Copy, DatabaseIcon } from "lucide-react";
 import Link from "next/link";
 
-interface ChannelDetailsPageProps {
-  params: Promise<{
-    id: string;
-  }>;
+// interface ChannelDetailsPageProps {
+//   params: Promise<{
+//     id: string;
+//     channel_name: string;
+//     inbound_balance: number;
+//   }>;
+// }
+
+type ChannelDetailsPageProps = {
+  params: Promise<{ id: string }>;
+};
+
+interface ConnectedNode {
+  peer: string;
+  publicKey: string;
+  feeRate: string;
+  baseFee: string;
+  maxHTLC: string;
+  minHTLC: string;
+  timelockDelta: string;
+  disabled: string;
 }
 
-export default function ChannelDetailsPage(props: ChannelDetailsPageProps) {
-  const params = use(props.params);
-  const { id } = params;
+interface ChannelData {
+  channelId: string;
+  inboundBalance: number;
+  outboundBalance: number;
+  channelAge: string;
+  lastUpdated: string;
+  capacity: number;
+  openingCost: number;
+  commitmentTransactionId: string;
+  connectedNodes: ConnectedNode[];
+}
 
-  // Mock data - replace with actual API call
-  const channelData = {
-    channelId: id,
-    channelName: "90258lx1823x0",
-    inboundBalance: 500000000,
-    outboundBalance: 150000000,
-    channelAge: "91d 23h 40m",
-    lastUpdated: "Jul 08, 2025",
-    capacity: 400000000,
-    openingCost: 3000,
-    commitmentTransactionId:
-      "lnbc1Qtrpp7wdwtrpp5evrkp74we9zhdjze3cnde7lhr44jwlxxktad3c...",
-    connectedNodes: [
-      {
-        peer: "block",
-        publicKey: "79d93f66b21408a63c3702cb9279a95b0eba4e4db38721d5d6...",
-        feeRate: "949ppm",
-        baseFee: "0sats",
-        maxHTLC: "360,000,000sats",
-        minHTLC: "0sats",
-        timelockDelta: "144blocks",
-        disabled: "No",
-      },
-      {
-        peer: "PaidlyInteractiv...",
-        publicKey: "79d93f66b21408a63c3702cb9279a95b0eba4e4db38721d5d6...",
-        feeRate: "1000ppm",
-        baseFee: "0sats",
-        maxHTLC: "400,000,000sats",
-        minHTLC: "1sats",
-        timelockDelta: "144blocks",
-        disabled: "No",
-      },
-    ],
-  };
+// export default function ChannelDetailsPage(props: ChannelDetailsPageProps) {
+//   const params = use(props.params);
+//   const { id, inbound_balance, channel_name } = params;
 
+export default function ChannelDetailsPage({
+  params,
+}: ChannelDetailsPageProps) {
+  const { id } = React.use(params); 
+
+  const [channelData, setChannelData] = React.useState<ChannelData | null>(
+    null
+  );
+
+  useEffect(() => {
+    async function fetchChannelData() {
+      try {
+        const res = await fetch(`/api/channels/${id}`);
+        const json = await res.json();
+
+        console.log(json); // debug
+
+        const channel = json.data; 
+        
+        setChannelData({
+          channelId: channel.channel_id,
+          inboundBalance: channel.remote_balance_sat,
+          outboundBalance: channel.local_balance_sat,
+          channelAge: `${Math.floor(channel.channel_age_blocks / 3600)} days`, 
+          lastUpdated: new Date(json.timestamp).toLocaleString(),
+
+          capacity: channel.capacity_sat,
+          openingCost: channel.opening_cost_sat ?? 0,
+          commitmentTransactionId: channel.txid,
+          connectedNodes: [
+            {
+              peer: "Node 1",
+              publicKey: channel.node1_policy.pubkey,
+              feeRate: `${channel.node1_policy.fee_rate_milli_msat} ppm`,
+              baseFee: `${channel.node1_policy.fee_base_msat / 1000} sats`,
+              maxHTLC: `${channel.node1_policy.max_htlc_msat / 1000} sats`,
+              minHTLC: `${channel.node1_policy.min_htlc_msat / 1000} sats`,
+              timelockDelta: `${
+                channel.node1_policy.time_lock_delta ?? 0
+              } blocks`,
+              disabled: channel.node1_policy.disabled ? "Yes" : "No",
+            },
+            {
+              peer: "Node 2",
+              publicKey: channel.node2_policy.pubkey,
+              feeRate: `${channel.node2_policy.fee_rate_milli_msat} ppm`,
+              baseFee: `${channel.node2_policy.fee_base_msat / 1000} sats`,
+              maxHTLC: `${channel.node2_policy.max_htlc_msat / 1000} sats`,
+              minHTLC: `${channel.node2_policy.min_htlc_msat / 1000} sats`,
+              timelockDelta: `${
+                channel.node2_policy.time_lock_delta ?? 0
+              } blocks`,
+              disabled: channel.node2_policy.disabled ? "Yes" : "No",
+            },
+          ],
+        });
+      } catch (error) {
+        console.error("Failed to load channel data", error);
+      }
+    }
+
+    fetchChannelData();
+  }, [id]);
+  
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
   };
+
+  // if (!channelData) {
+  //   return <div>Loading...</div>;
+  // }
 
   return (
     <AppLayout>
@@ -103,7 +166,9 @@ export default function ChannelDetailsPage(props: ChannelDetailsPageProps) {
             <span className="text-success-green text-sm">↑ 7.2%</span>
           </div>
           <div className="text-3xl font-medium text-grey-dark mb-4">
-            {new Intl.NumberFormat("en-US").format(channelData.inboundBalance)}{" "}
+            {channelData
+              ? new Intl.NumberFormat("en-US").format(channelData.inboundBalance)
+              : ""}{" "}
             sats
           </div>
           {/* Mini chart placeholder */}
@@ -134,7 +199,9 @@ export default function ChannelDetailsPage(props: ChannelDetailsPageProps) {
             <span className="text-red-500 text-sm">↓ 7.2%</span>
           </div>
           <div className="text-3xl font-medium text-grey-dark mb-4">
-            {new Intl.NumberFormat("en-US").format(channelData.outboundBalance)}{" "}
+            {channelData
+              ? new Intl.NumberFormat("en-US").format(channelData.outboundBalance)
+              : ""}{" "}
             sats
           </div>
           {/* Mini chart placeholder */}
@@ -163,20 +230,20 @@ export default function ChannelDetailsPage(props: ChannelDetailsPageProps) {
             <div>
               <div className="text-sm text-grey-accent mb-1">Channel ID</div>
               <div className="text-base font-medium text-maya-blue">
-                {channelData.channelId}
+                {channelData ? channelData.channelId : "..."}
               </div>
             </div>
             <div>
               <div className="text-sm text-grey-accent mb-1">Channel Age</div>
               <div className="text-base font-medium text-maya-blue">
-                {channelData.channelAge}
+                {channelData ? channelData.channelAge : "..."}
               </div>
             </div>
             <div>
               <div className="text-sm text-grey-accent mb-1">Capacity</div>
               <div className="text-base font-medium text-maya-blue">
-                {new Intl.NumberFormat("en-US").format(channelData.capacity)}
-                sats
+                {channelData
+                  ? new Intl.NumberFormat("en-US").format(channelData.capacity) : "..."} sats
               </div>
             </div>
           </div>
@@ -188,13 +255,14 @@ export default function ChannelDetailsPage(props: ChannelDetailsPageProps) {
               </div>
               <div className="flex items-center gap-2">
                 <div className="font-medium text-maya-blue font-mono text-base truncate max-w-64">
-                  {channelData.commitmentTransactionId}
+                  {/* {channelData.commitmentTransactionId} */}
+                  {channelData ? channelData.commitmentTransactionId : "..."}
                 </div>
                 <Button
-                  variant="ghost"
+                  variant="link"
                   size="sm"
                   onClick={() =>
-                    copyToClipboard(channelData.commitmentTransactionId)
+                    copyToClipboard(channelData ? channelData.commitmentTransactionId : "...")
                   }
                   className="p-1 h-6 w-6"
                 >
@@ -205,14 +273,13 @@ export default function ChannelDetailsPage(props: ChannelDetailsPageProps) {
             <div>
               <div className="text-sm text-grey-accent mb-1">Last Updated</div>
               <div className="text-base font-medium text-maya-blue">
-                {channelData.lastUpdated}
+                {channelData ? channelData.lastUpdated : "..."}
               </div>
             </div>
             <div>
               <div className="text-sm text-grey-accent mb-1">Opening Cost</div>
               <div className="text-base font-medium text-maya-blue">
-                {new Intl.NumberFormat("en-US").format(channelData.openingCost)}
-                sats
+                {channelData ? new Intl.NumberFormat("en-US").format(channelData.openingCost) : "..."} sats
               </div>
             </div>
           </div>
@@ -226,7 +293,7 @@ export default function ChannelDetailsPage(props: ChannelDetailsPageProps) {
         </h2>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {channelData.connectedNodes.map((node, index) => (
+          {channelData?.connectedNodes?.map((node, index) => (
             <div key={index} className="space-y-4">
               {/* <div> */}
               <div className="text-sm text-grey-accent mb-1">
@@ -244,7 +311,7 @@ export default function ChannelDetailsPage(props: ChannelDetailsPageProps) {
                   {node.publicKey}
                 </div>
                 <Button
-                  variant="ghost"
+                  variant="link"
                   size="sm"
                   onClick={() => copyToClipboard(node.publicKey)}
                   className="p-1 h-6 w-6"

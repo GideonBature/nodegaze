@@ -25,68 +25,33 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import Link from "next/link";
+import { useSession } from "next-auth/react";
 
-const data: Channel[] = [
-  {
-    id: "022047c869809c747ae69603c4ed178c4c3cb899c8e5370a5d8684b0e2b508e058",
-    channelName: "90258lx1823x0",
-    state: "active",
-    inboundBalance: 5000000,
-    outboundBalance: 5000000,
-    date: "15th Feb, 2025",
-    uptime: "Very Good",
-  },
-  {
-    id: "022047c869809c747ae69603c4ed178c4c3cb899c8e5370a5d8684b0e2b508e058",
-    channelName: "45789abc4567x1",
-    state: "active",
-    inboundBalance: 3500000,
-    outboundBalance: 2800000,
-    date: "14th Feb, 2025",
-    uptime: "Good",
-  },
-  {
-    id: "022047c869809c747ae69603c4ed178c4c3cb899c8e5370a5d8684b0e2b508e058",
-    channelName: "78901def7890x2",
-    state: "inactive",
-    inboundBalance: 1200000,
-    outboundBalance: 4500000,
-    date: "13th Feb, 2025",
-    uptime: "Poor",
-  },
-  {
-    id: "022047c869809c747ae69603c4ed178c4c3cb899c8e5370a5d8684b0e2b508e058",
-    channelName: "12345ghi1234x3",
-    state: "active",
-    inboundBalance: 7500000,
-    outboundBalance: 1500000,
-    date: "12th Feb, 2025",
-    uptime: "Very Good",
-  },
-  {
-    id: "022047c869809c747ae69603c4ed178c4c3cb899c8e5370a5d8684b0e2b508e058",
-    channelName: "67890jkl6789x4",
-    state: "pending",
-    inboundBalance: 2100000,
-    outboundBalance: 3400000,
-    date: "11th Feb, 2025",
-    uptime: "Good",
-  },
-];
+type ApiChannel = {
+  chan_id: number;
+  alias: string | null;
+  channel_state: string | null;
+  private: boolean;
+  remote_balance: number;
+  local_balance: number;
+  capacity: number;
+  last_update: number;
+  uptime: number;
+};
 
 export type Channel = {
-  id: string;
-  channelName: string;
-  state: "active" | "inactive" | "pending";
-  inboundBalance: number;
-  outboundBalance: number;
-  date: string;
-  uptime: "Very Good" | "Good" | "Poor";
+  id: number;
+  channel_name: string;
+  state: string;
+  inbound_balance: number;
+  outbound_balance: number;
+  last_updated: string;
+  uptime: number;
 };
 
 export const columns: ColumnDef<Channel>[] = [
   {
-    accessorKey: "channelName",
+    accessorKey: "channel_name",
     header: "Channel Name",
     cell: ({ row }) => {
       const channelId = row.original.id;
@@ -95,7 +60,7 @@ export const columns: ColumnDef<Channel>[] = [
           href={`/channels/${channelId}`}
           className="font-normal text-grey-dark hover:text-blue-primary hover:underline cursor-pointer"
         >
-          {row.getValue("channelName")}
+          {row.getValue("channel_name")}
         </Link>
       );
     },
@@ -123,34 +88,34 @@ export const columns: ColumnDef<Channel>[] = [
             state
           )}`}
         >
-          {state.charAt(0).toUpperCase() + state.slice(1)}
+          {state ? state.charAt(0).toUpperCase() + state.slice(1) : "Unknown"}
         </span>
       );
     },
   },
   {
-    accessorKey: "inboundBalance",
+    accessorKey: "inbound_balance",
     header: "Inbound Balance",
     cell: ({ row }) => {
-      const balance = row.getValue("inboundBalance") as number;
+      const balance = row.getValue("inbound_balance") as number;
       const formatted = new Intl.NumberFormat("en-US").format(balance);
       return <div className="text-grey-dark">{formatted} sats</div>;
     },
   },
   {
-    accessorKey: "outboundBalance",
+    accessorKey: "outbound_balance",
     header: "Outbound Balance",
     cell: ({ row }) => {
-      const balance = row.getValue("outboundBalance") as number;
+      const balance = row.getValue("outbound_balance") as number;
       const formatted = new Intl.NumberFormat("en-US").format(balance);
       return <div className="text-grey-dark">{formatted} sats</div>;
     },
   },
   {
-    accessorKey: "date",
-    header: "Date",
+    accessorKey: "last_updated",
+    header: "Last Updated",
     cell: ({ row }) => (
-      <div className="text-grey-dark">{row.getValue("date")}</div>
+      <div className="text-grey-dark">{row.getValue("last_updated")}</div>
     ),
   },
   {
@@ -170,33 +135,33 @@ export const columns: ColumnDef<Channel>[] = [
             return "text-gray-600";
         }
       };
-      const getProgressPercentage = (uptime: string) => {
-        switch (uptime) {
-          case "Very Good":
-            return 90;
-          case "Good":
-            return 70;
-          case "Poor":
-            return 30;
-          default:
-            return 0;
-        }
-      };
+      // const getProgressPercentage = (uptime: string) => {
+      //   switch (uptime) {
+      //     case "Very Good":
+      //       return 90;
+      //     case "Good":
+      //       return 70;
+      //     case "Poor":
+      //       return 30;
+      //     default:
+      //       return 0;
+      //   }
+      // };
 
-      const getStrokeColor = (uptime: string) => {
-        switch (uptime) {
-          case "Very Good":
-            return "#33CE6D";
-          case "Good":
-            return "#EAB308";
-          case "Poor":
-            return "#EF4444";
-          default:
-            return "#D1D5DB";
-        }
-      };
+      // const getStrokeColor = (uptime: string) => {
+      //   switch (uptime) {
+      //     case "Very Good":
+      //       return "#33CE6D";
+      //     case "Good":
+      //       return "#EAB308";
+      //     case "Poor":
+      //       return "#EF4444";
+      //     default:
+      //       return "#D1D5DB";
+      //   }
+      // };
 
-      const percentage = getProgressPercentage(uptime);
+      // const percentage = getProgressPercentage(uptime);
       //   const circumference = 2 * Math.PI * 16; // radius = 16
       //   const strokeDasharray = circumference;
       //   const strokeDashoffset = circumference - (percentage / 100) * circumference;
@@ -207,8 +172,8 @@ export const columns: ColumnDef<Channel>[] = [
             {uptime}
           </span>
           <div className="relative w-8 h-8">
-            <svg className="w-8 h-8 transform -rotate-90" viewBox="0 0 36 36">
-              {/* Background circle */}
+            {/* <svg className="w-8 h-8 transform -rotate-90" viewBox="0 0 36 36">
+              Background circle
               <path
                 d="M18 2.0845
                   a 15.9155 15.9155 0 0 1 0 31.831
@@ -217,7 +182,7 @@ export const columns: ColumnDef<Channel>[] = [
                 stroke="#E5E7EB"
                 strokeWidth="3"
               />
-              {/* Progress circle */}
+              Progress circle
               <path
                 d="M18 2.0845
                   a 15.9155 15.9155 0 0 1 0 31.831
@@ -225,10 +190,10 @@ export const columns: ColumnDef<Channel>[] = [
                 fill="none"
                 strokeWidth="3"
                 stroke={getStrokeColor(uptime)}
-                strokeDasharray={`${percentage}, 100`}
+                strokeDasharray={`${getProgressPercentage}, 100`}
                 strokeLinecap="round"
               />
-            </svg>
+            </svg> */}
           </div>
         </div>
       );
@@ -255,6 +220,14 @@ export const columns: ColumnDef<Channel>[] = [
 ];
 
 export function DataTable() {
+  const { data: session, status } = useSession();
+  console.log("Session:", session);
+  console.log("Status:", status);
+
+  const [channels, setChannels] = React.useState<Channel[]>([]);
+  const [isLoading, setIsLoading] = React.useState(false);
+  const [error, setError] = React.useState<string>("");
+
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>(
     []
@@ -262,8 +235,151 @@ export function DataTable() {
   const [columnVisibility, setColumnVisibility] =
     React.useState<VisibilityState>({});
 
+  // const fetchChannels = async () => {
+  //   setIsLoading(true);
+  //   setError("");
+  //   try {
+  //     const res = await fetch("/api/channels?page=1&per_page=10");
+  //     const result = await res.json();
+  //     console.log("Full API response:", result);
+  //     console.log(res);
+
+  //     if (!res.ok) {
+  //       const errorMessage =
+  //         typeof result.error === "string"
+  //           ? result.error
+  //           : result.error?.message ||
+  //             JSON.stringify(result.error) ||
+  //             "Failed to fetch channels";
+  //       throw new Error(errorMessage);
+  //     }
+
+  //     const apiItems = (result?.data?.items ?? []) as ApiChannel[];
+
+  //     if (apiItems.length === 0) {
+  //       setChannels([]);
+  //       setError("No channels available...");
+  //       return;
+  //     }
+
+  //     const transformed: Channel[] = apiItems.map((item) => {
+  //       const rawState = (item.channel_state ?? "").toString().toLowerCase();
+  //       const state: Channel["state"] =
+  //         rawState === "active" ||
+  //         rawState === "inactive" ||
+  //         rawState === "pending"
+  //           ? (rawState as Channel["state"])
+  //           : "unknown";
+
+  //       return {
+  //         id: item.chan_id,
+  //         channel_name:
+  //           item.alias && item.alias.trim() !== ""
+  //             ? item.alias
+  //             : String(item.chan_id),
+  //         state,
+  //         inbound_balance: Number(item.remote_balance ?? 0),
+  //         outbound_balance: Number(item.local_balance ?? 0),
+  //         last_updated: new Date(
+  //           (item.last_update ?? 0) * 1000
+  //         ).toLocaleString(),
+  //         uptime: item.uptime,
+  //       };
+  //     });
+
+  //     console.log("Transformed data for table:", transformed);
+  //     setChannels(transformed);
+  //   } catch (err) {
+  //     console.error("Error fetching channels:", err);
+  //     setError(err instanceof Error ? err.message : "Something went wrong");
+  //   } finally {
+  //     setIsLoading(false);
+  //   }
+  // };
+
+  // React.useEffect(() => {
+  //   fetchChannels();
+  // }, []);
+
+  const [page, setPage] = React.useState(1);
+  const [totalPages, setTotalPages] = React.useState(1);
+
+  const fetchChannels = async (pageNum = 1) => {
+    setIsLoading(true);
+    setError("");
+    try {
+      const res = await fetch(`/api/channels?page=${pageNum}&per_page=10`);
+      const result = await res.json();
+
+      if (!res.ok) {
+        const errorMessage =
+          typeof result.error === "string"
+            ? result.error
+            : result.error?.message ||
+              JSON.stringify(result.error) ||
+              "Failed to fetch channels";
+        throw new Error(errorMessage);
+      }
+
+      const apiItems = (result?.data?.items ?? []) as ApiChannel[];
+      setTotalPages(result?.data?.total_pages || 1); // <-- update if your API returns total_pages
+
+      if (apiItems.length === 0) {
+        setChannels([]);
+        setError("No channels available...");
+        return;
+      }
+
+      const transformed: Channel[] = apiItems.map((item) => {
+        const rawState = (item.channel_state ?? "").toString().toLowerCase();
+        const state: Channel["state"] =
+          rawState === "active" ||
+          rawState === "inactive" ||
+          rawState === "pending"
+            ? (rawState as Channel["state"])
+            : "unknown";
+
+        // Uptime as string category for display
+        // const uptimeSeconds = typeof item.uptime === "number" ? item.uptime : 0;
+        // const uptimePercentage = (uptimeSeconds / 86400) * 100;
+        // let uptimeCategory: string;
+        // if (uptimePercentage >= 90) uptimeCategory = "Very Good";
+        // else if (uptimePercentage >= 70) uptimeCategory = "Good";
+        // else uptimeCategory = "Poor";
+
+        return {
+          id: item.chan_id,
+          channel_name:
+            item.alias && item.alias.trim() !== ""
+              ? item.alias
+              : String(item.chan_id),
+          state,
+          inbound_balance: Number(item.remote_balance ?? 0),
+          outbound_balance: Number(item.local_balance ?? 0),
+          last_updated: new Date(
+            (item.last_update ?? 0) * 1000
+          ).toLocaleString(),
+          uptime: item.uptime,
+        };
+      });
+
+      setChannels(transformed);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  React.useEffect(() => {
+    fetchChannels(page);
+  }, [page]);
+
+
+
+
   const table = useReactTable({
-    data,
+    data: channels,
     columns,
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
@@ -272,11 +388,7 @@ export function DataTable() {
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
     onColumnVisibilityChange: setColumnVisibility,
-    state: {
-      sorting,
-      columnFilters,
-      columnVisibility,
-    },
+    state: { sorting, columnFilters, columnVisibility },
   });
 
   return (
@@ -284,7 +396,6 @@ export function DataTable() {
       <div className="rounded-xl border">
         <Table className="bg-white">
           <TableHeader>
-            {/* All Channels header row */}
             <TableRow className="border-b">
               <TableHead colSpan={columns.length} className="py-6 px-4">
                 <div className="flex items-center gap-3">
@@ -292,39 +403,49 @@ export function DataTable() {
                     All Channels
                   </h1>
                   <span className="bg-cerulean-blue text-grey-dark px-3 py-1 rounded-2xl text-sm font-medium">
-                    {data.length}
+                    {channels.length}
                   </span>
                 </div>
               </TableHead>
             </TableRow>
-            {/* Column headers */}
             {table.getHeaderGroups().map((headerGroup) => (
               <TableRow key={headerGroup.id}>
-                {headerGroup.headers.map((header) => {
-                  return (
-                    <TableHead
-                      key={header.id}
-                      className="text-grey-table-header font-medium text-sm py-3 px-4"
-                    >
-                      {header.isPlaceholder
-                        ? null
-                        : flexRender(
-                            header.column.columnDef.header,
-                            header.getContext()
-                          )}
-                    </TableHead>
-                  );
-                })}
+                {headerGroup.headers.map((header) => (
+                  <TableHead
+                    key={header.id}
+                    className="text-grey-table-header font-medium text-sm py-3 px-4"
+                  >
+                    {flexRender(
+                      header.column.columnDef.header,
+                      header.getContext()
+                    )}
+                  </TableHead>
+                ))}
               </TableRow>
             ))}
           </TableHeader>
           <TableBody>
-            {table.getRowModel().rows?.length ? (
-              table.getRowModel().rows.map((row) => (
-                <TableRow
-                  key={row.id}
-                  data-state={row.getIsSelected() && "selected"}
+            {isLoading ? (
+              <TableRow>
+                <TableCell
+                  colSpan={columns.length}
+                  className="py-6 text-center text-grey-accent"
                 >
+                  Loading channels...
+                </TableCell>
+              </TableRow>
+            ) : error ? (
+              <TableRow>
+                <TableCell
+                  colSpan={columns.length}
+                  className="py-6 text-center text-grey-accent"
+                >
+                  {error}
+                </TableCell>
+              </TableRow>
+            ) : table.getRowModel().rows.length ? (
+              table.getRowModel().rows.map((row) => (
+                <TableRow key={row.id}>
                   {row.getVisibleCells().map((cell) => (
                     <TableCell
                       key={cell.id}
@@ -352,24 +473,26 @@ export function DataTable() {
         </Table>
       </div>
       <div className="flex items-center justify-end space-x-2 py-4">
-        <div className="space-x-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => table.previousPage()}
-            disabled={!table.getCanPreviousPage()}
-          >
-            Previous
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => table.nextPage()}
-            disabled={!table.getCanNextPage()}
-          >
-            Next
-          </Button>
-        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          // onClick={() => table.previousPage()}
+          // disabled={!table.getCanPreviousPage()}
+          onClick={() => setPage((p) => Math.max(1, p - 1))}
+          disabled={page === 1}
+        >
+          Previous
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          // onClick={() => table.nextPage()}
+          // disabled={!table.getCanNextPage()}
+          onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+          disabled={page === totalPages}
+        >
+          Next
+        </Button>
       </div>
     </div>
   );
