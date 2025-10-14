@@ -12,6 +12,8 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useSession } from "next-auth/react";
+import { useQueryClient } from '@tanstack/react-query';
 
 interface ConnectNodeDialogProps {
   onSuccess?: () => void;
@@ -21,6 +23,8 @@ export function ConnectNodeDialog({ onSuccess }: ConnectNodeDialogProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
+  const { update } = useSession();
+  const queryClient = useQueryClient();
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -51,10 +55,14 @@ export function ConnectNodeDialog({ onSuccess }: ConnectNodeDialogProps) {
         return;
       }
 
-      // Success
+      if (result.success && result.data?.new_access_token) {
+        await update({ accessToken: result.data.new_access_token });
+      }
+
       setIsOpen(false);
       if (onSuccess) {
         onSuccess();
+        await queryClient.invalidateQueries();
       }
     } catch (error) {
       setError("An unexpected error occurred");

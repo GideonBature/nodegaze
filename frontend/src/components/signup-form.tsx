@@ -87,12 +87,12 @@ export function SignupForm({
                 </div>
               )}
               <div className="grid gap-3">
-                <Label htmlFor="name">Full Name</Label>
+                <Label htmlFor="name">Account Name</Label>
                 <Input
                   id="name"
                   name="name"
                   type="text"
-                  placeholder="John Doe"
+                  placeholder="Nodegaze"
                   required
                   disabled={isLoading}
                 />
@@ -103,7 +103,7 @@ export function SignupForm({
                   id="username"
                   name="username"
                   type="text"
-                  placeholder="username"
+                  placeholder="johndoe"
                   required
                   disabled={isLoading}
                 />
@@ -114,7 +114,7 @@ export function SignupForm({
                   id="email"
                   name="email"
                   type="email"
-                  placeholder="john@example.com"
+                  placeholder="john@nodegaze.com"
                   required
                   disabled={isLoading}
                 />

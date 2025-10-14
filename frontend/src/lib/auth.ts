@@ -108,7 +108,7 @@ export const authOptions: NextAuthOptions = {
     signIn: "/login",
   },
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user, trigger, session }) {
       // Initial sign in - store user data and tokens
       if (user) {
         token.username = user.username || "";
@@ -119,6 +119,22 @@ export const authOptions: NextAuthOptions = {
         token.accountId = user.accountId;
         token.accessTokenExpiry = Date.now() + Number(token.expiresIn) * 1000;
         return token;
+      }
+
+      // If update trigger with a new accessToken (from node connection), use it
+      if (trigger === "update" && session?.accessToken) {
+        console.log("Updating token with new access token from node connection...");
+        token.accessToken = session.accessToken;
+        token.accessTokenExpiry = Date.now() + Number(token.expiresIn) * 1000;
+        return token;
+      }
+
+      // If update trigger with forceRefresh flag, refresh immediately
+      if (trigger === "update" && token.forceRefresh) {
+        console.log("Force refreshing token...");
+        const refreshedToken = await refreshAccessToken(token);
+        delete refreshedToken.forceRefresh;
+        return refreshedToken;
       }
 
       // Token is still valid if its expiry is greater than 5 minutes from now
